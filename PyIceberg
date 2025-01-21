@@ -1,0 +1,41 @@
+import pyarrow as pa
+from pyiceberg.catalog import load_catalog
+from pyiceberg.schema import Schema
+from pyiceberg.types import NestedField, LongType, StringType, TimestampType
+from pyiceberg.io.pyarrow import PyArrowFileIO
+import s3fs
+
+# Configure S3 filesystem
+s3 = s3fs.S3FileSystem(
+    key='YOUR_ACCESS_KEY',
+    secret='YOUR_SECRET_KEY',
+    client_kwargs={'endpoint_url': 'https://s3.amazonaws.com'}
+)
+
+# Initialize PyArrowFileIO with the configured S3 filesystem
+file_io = PyArrowFileIO(s3)
+
+# Load the catalog (replace 'rest' with your catalog type if different)
+catalog = load_catalog('rest', uri='http://your-rest-catalog-endpoint')
+
+# Define the schema matching the Starburst table
+schema = Schema(
+    NestedField(1, "id", LongType(), required=True),
+    NestedField(2, "name", StringType(), required=True),
+    NestedField(3, "age", LongType(), required=True),
+    NestedField(4, "created_at", TimestampType(), required=True)
+)
+
+# Load the existing table
+table = catalog.load_table('your_schema.sample_table')
+
+# Prepare data using PyArrow
+data = [
+    {"id": 1, "name": "Alice", "age": 30, "created_at": "2025-01-20T15:54:10"},
+    {"id": 2, "name": "Bob", "age": 25, "created_at": "2025-01-20T15:54:10"},
+    {"id": 3, "name": "Charlie", "age": 35, "created_at": "2025-01-20T15:54:10"}
+]
+arrow_table = pa.Table.from_pylist(data)
+
+# Append data to the Iceberg table
+table.append(arrow_table)
