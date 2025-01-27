@@ -1,0 +1,81 @@
+import logging
+from pyspark.sql import SparkSession
+
+# Configure Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("FAANGDataPipeline")
+
+class FAANGDataPipeline:
+    def __init__(self, config):
+        self.config = config
+        self.spark = self._initialize_spark()
+
+    def _initialize_spark(self):
+        """
+        Initialize and configure the Spark session.
+        """
+        logger.info("Initializing Spark session with custom configurations.")
+        builder = SparkSession.builder.appName(self.config["app_name"])
+
+        # Add Spark configurations dynamically
+        spark_configs = self.config.get("spark_configs", {})
+        for key, value in spark_configs.items():
+            builder = builder.config(key, value)
+
+        spark = builder.getOrCreate()
+        spark.sparkContext.setLogLevel("INFO")
+        logger.info("Spark session initialized successfully.")
+        return spark
+
+    def s3_read(self, query):
+        """
+        Read data from S3 using a SQL query.
+        :param query: SQL query to execute.
+        """
+        try:
+            logger.info(f"Executing query: {query}")
+            df = self.spark.sql(query)
+            df.show(10, truncate=False)
+            logger.info("Data read and displayed successfully.")
+            return df
+        except Exception as e:
+            logger.error(f"Error during S3 read: {e}")
+            raise
+
+    def run(self):
+        """
+        Execute the data pipeline.
+        """
+        logger.info("Starting the FAANG-style data pipeline...")
+        try:
+            # Sample query to read data
+            query = "SELECT * FROM db.table LIMIT 10"
+            self.s3_read(query)
+        except Exception as e:
+            logger.error(f"Pipeline execution failed: {e}")
+            raise
+
+
+# Main Program
+def main():
+    # Configuration for the Spark session
+    config = {
+        "app_name": "FAANG Data Pipeline",
+        "spark_configs": {
+            "spark.sql.extensions": "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
+            "spark.sql.catalog.spark_catalog": "org.apache.iceberg.spark.SparkCatalog",
+            "spark.sql.catalog.spark_catalog.type": "hadoop",
+            "spark.sql.catalog.spark_catalog.warehouse": "s3://your-s3-bucket/warehouse",
+            "fs.s3a.access.key": "your-aws-access-key",
+            "fs.s3a.secret.key": "your-aws-secret-key",
+            "fs.s3a.endpoint": "s3.amazonaws.com",
+        },
+    }
+
+    # Run the pipeline
+    pipeline = FAANGDataPipeline(config)
+    pipeline.run()
+
+
+if __name__ == "__main__":
+    main()
