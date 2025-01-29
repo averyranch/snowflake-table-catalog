@@ -13,10 +13,10 @@ def main():
             .config("spark.sql.catalog.hive_catalog.warehouse", "s3a://your-bucket-name/warehouse/") \
             .enableHiveSupport() \
             .getOrCreate()
-        print("✅ SparkSession initialized successfully.")
+        print("SparkSession initialized successfully.")
     
     except Exception as e:
-        print(f"❌ Error initializing SparkSession: {e}")
+        print(f"Error initializing SparkSession: {e}")
         return
 
     # Step 2: Define Database & Table Name
@@ -27,9 +27,9 @@ def main():
     try:
         # Step 3: Ensure the database exists
         spark.sql(f"CREATE DATABASE IF NOT EXISTS {database_name}")
-        print(f"✅ Database '{database_name}' checked/created successfully.")
+        print(f"Database '{database_name}' checked/created successfully.")
     except Exception as e:
-        print(f"❌ Error creating/checking database: {e}")
+        print(f"Error creating/checking database: {e}")
         return
 
     try:
@@ -43,9 +43,9 @@ def main():
             USING iceberg
             LOCATION 's3a://your-bucket-name/{table_name}/'
         """)
-        print(f"✅ Iceberg table '{full_table_name}' created successfully.")
+        print(f"Iceberg table '{full_table_name}' created successfully.")
     except Exception as e:
-        print(f"❌ Error creating Iceberg table: {e}")
+        print(f"Error creating Iceberg table: {e}")
         return
 
     try:
@@ -56,30 +56,30 @@ def main():
 
         # Append data to the Iceberg table
         df.write.format("iceberg").mode("append").save(full_table_name)
-        print(f"✅ Data written successfully to Iceberg table: {full_table_name}")
+        print(f"Data written successfully to Iceberg table: {full_table_name}")
 
     except Exception as e:
-        print(f"❌ Error writing data to Iceberg table: {e}")
+        print(f"Error writing data to Iceberg table: {e}")
         return
 
     try:
         # Step 6: Verify Iceberg Metadata
-        print("📊 Checking Iceberg snapshots...")
+        print("Checking Iceberg snapshots...")
         spark.sql(f"SELECT * FROM {full_table_name}.snapshots").show()
-        print("✅ Iceberg snapshots verified successfully.")
+        print("Iceberg snapshots verified successfully.")
 
     except Exception as e:
-        print(f"❌ Error checking Iceberg snapshots: {e}")
+        print(f"Error checking Iceberg snapshots: {e}")
         return
 
     try:
         # Step 7: Verify Starburst Can Read the Table
-        print("📊 Querying the table to ensure Starburst compatibility...")
+        print("Querying the table to ensure Starburst compatibility...")
         spark.sql(f"SELECT * FROM {full_table_name}").show()
-        print("✅ Table data verified successfully for Starburst query.")
+        print("Table data verified successfully for Starburst query.")
 
     except Exception as e:
-        print(f"❌ Error querying Iceberg table from Spark: {e}")
+        print(f"Error querying Iceberg table from Spark: {e}")
         return
 
 if __name__ == "__main__":
