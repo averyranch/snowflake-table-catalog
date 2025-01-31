@@ -1,0 +1,47 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, expr, rand, current_timestamp
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, TimestampType
+
+# Initialize Spark Session with Iceberg Support
+spark = SparkSession.builder \
+    .appName("PySparkIcebergStreaming") \
+    .config("spark.sql.catalog.iceberg", "org.apache.iceberg.spark.SparkCatalog") \
+    .config("spark.sql.catalog.iceberg.type", "hadoop") \
+    .config("spark.sql.catalog.iceberg.warehouse", "s3a://your-bucket/") \
+    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
+    .config("spark.hadoop.fs.s3a.access.key", "YOUR_AWS_ACCESS_KEY") \
+    .config("spark.hadoop.fs.s3a.secret.key", "YOUR_AWS_SECRET_KEY") \
+    .config("spark.hadoop.fs.s3a.endpoint", "s3.amazonaws.com") \
+    .config("spark.hadoop.fs.s3a.fast.upload", "true") \
+    .config("spark.sql.parquet.compression.codec", "snappy") \
+    .getOrCreate()
+
+# Create Iceberg Table (if not exists)
+spark.sql("""
+    CREATE TABLE IF NOT EXISTS iceberg.default.streaming_users (
+        id STRING,
+        name STRING,
+        age INT,
+        event_time TIMESTAMP
+    )
+    USING iceberg
+    PARTITIONED BY (event_time)
+    LOCATION 's3a://your-bucket/iceberg-streaming-data/';
+""")
+
+# Simulate a Streaming Data Source
+df_stream = spark.readStream \
+    .format("rate") \
+    .option("rowsPerSecond", 10) \
+    .load() \
+    .selectExpr("uuid() as id", "'User_' || cast(rand()*100 as int) as name", "cast(rand()*50 as int) as age", "current_timestamp() as event_time")
+
+# Write stream to Iceberg Table
+query = df_stream.writeStream \
+    .format("iceberg") \
+    .outputMode("append") \
+    .trigger(processingTime="5 minutes") \
+    .option("checkpointLocation", "s3a://your-bucket/checkpoints/") \
+    .start("iceberg.default.streaming_users")
+
+query.awaitTermination()
