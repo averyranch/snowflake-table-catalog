@@ -1,15 +1,45 @@
-
 import time
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import expr, col, when, lit, current_timestamp, rand, count
+from pyspark.sql.functions import expr, col, when, lit, current_timestamp, rand
 
-# ------------------ Initialize Spark ------------------
+# Initialize Spark Session
 spark = SparkSession.builder \
-    .appName("ServiceNowAssetStream") \
+    .appName("StreamAndMergeWithTableCreation") \
     .config("spark.sql.streaming.schemaInference", "true") \
+    .config("spark.sql.catalog.iceberg_catalog", "org.apache.iceberg.spark.SparkCatalog") \
+    .config("spark.sql.catalog.iceberg_catalog.type", "hadoop") \
+    .config("spark.sql.catalog.iceberg_catalog.warehouse", "s3a://your-bucket/iceberg/") \
+    .config("spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
     .getOrCreate()
 
-# ------------------ Generate Streaming Asset Data ------------------
+# Define Paths
+s3_parquet_path = "s3a://your-bucket/iceberg/asset_data/"
+checkpoint_path = "s3a://your-bucket/iceberg/checkpoints/asset_data/"
+table_name = "iceberg_catalog.default.asset_data"
+
+# Check if Table Exists and Create if Missing
+tables = spark.sql(f"SHOW TABLES IN iceberg_catalog.default").collect()
+table_exists = any(row.tableName == "asset_data" for row in tables)
+
+if not table_exists:
+    spark.sql(f"""
+        CREATE TABLE {table_name} (
+            asset_id STRING,
+            asset_name STRING,
+            asset_type STRING,
+            status STRING,
+            location STRING,
+            assigned_to STRING,
+            purchase_date DATE,
+            cost INT,
+            last_updated TIMESTAMP
+        )
+        USING iceberg
+        PARTITIONED BY (purchase_date)
+        LOCATION '{s3_parquet_path}'
+    """)
+
+# Generate Streaming Data
 asset_stream = spark.readStream \
     .format("rate") \
     .option("rowsPerSecond", 10) \
@@ -32,45 +62,40 @@ asset_stream = spark.readStream \
     .withColumn("cost", expr("cast(rand() * 5000 + 5000 as int)")) \
     .withColumn("last_updated", current_timestamp())
 
-# ------------------ Count Incoming Stream Records ------------------
-incoming_count = asset_stream.groupBy().agg(count("*").alias("streamed_records"))
-
-# ------------------ Write Incoming Count to Memory ------------------
-query_stream_count = incoming_count.writeStream \
-    .outputMode("complete") \
-    .format("memory") \
-    .queryName("stream_tracking") \
+# Write Streaming Data to S3 in Parquet
+query_parquet = asset_stream.writeStream \
+    .outputMode("append") \
+    .format("parquet") \
+    .option("path", s3_parquet_path) \
+    .option("checkpointLocation", checkpoint_path) \
     .trigger(processingTime="3 seconds") \
     .start()
 
-# ------------------ Write Stream to Console ------------------
-query_console = asset_stream.writeStream \
-    .outputMode("append") \
-    .format("console") \
-    .option("truncate", False) \
-    .trigger(processingTime="3 seconds") \
-    .start()
+# Function to Merge Data into Iceberg
+def merge_into_iceberg():
+    merge_query = f"""
+        MERGE INTO {table_name} target
+        USING (
+            SELECT * FROM parquet.`{s3_parquet_path}`
+        ) source
+        ON target.asset_id = source.asset_id
+        WHEN MATCHED THEN 
+            UPDATE SET 
+                target.status = source.status,
+                target.last_updated = source.last_updated
+        WHEN NOT MATCHED THEN 
+            INSERT *
+    """
+    spark.sql(merge_query)
 
-# ------------------ Write Stream to In-Memory Table ------------------
-query_memory = asset_stream.writeStream \
-    .outputMode("append") \
-    .format("memory") \
-    .queryName("asset_data") \
-    .trigger(processingTime="3 seconds") \
-    .start()  # ✅ Ensure no trailing `\`
+# Run Merge Every 5 Minutes While Streaming
+try:
+    while True:
+        time.sleep(300)  # Wait for 5 minutes
+        merge_into_iceberg()
+except KeyboardInterrupt:
+    print("Stopping streaming and merge process...")
 
-# ------------------ Run for 30 Seconds ------------------
-time.sleep(30)  # ✅ Corrected placement
-
-# Fetch counts from memory
-total_streamed = spark.sql("SELECT * FROM stream_tracking").collect()[0][0]
-total_written = spark.sql("SELECT COUNT(*) FROM asset_data").collect()[0][0]
-
-# Stop the streams
-query_console.stop()
-query_memory.stop()
-query_stream_count.stop()
-
-# ✅ No need for `awaitTermination()`, since we stop manually
-print(f"Total records streamed: {total_streamed}")
-print(f"Total records written to memory: {total_written}")
+# Stop Streaming
+query_parquet.stop()
+spark.stop()
