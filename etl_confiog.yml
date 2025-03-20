@@ -1,0 +1,19 @@
+# Trino Connection Settings
+connection:
+  host: "your-starburst-cluster.com"  # Replace with your Trino host
+  port: 443  # Use 8080 if TLS is disabled
+  user: "your_username"
+  password: "your_password"
+  catalog: "hive"  # Source from Hadoop HDFS (Hive)
+  schema: "raw_data"
+  protocol: "https"  # Use "http" if TLS is disabled
+
+# ETL Job Settings (Full Load)
+tables:
+  - source: "hive.raw_data.sales"
+    destination: "iceberg.db.processed_sales"
+    s3_location: "s3://your-bucket/path/processed_sales"
+
+  - source: "hive.raw_data.customers"
+    destination: "iceberg.db.processed_customers"
+    s3_location: "s3://your-bucket/path/processed_customers"
