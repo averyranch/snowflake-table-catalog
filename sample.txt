@@ -1,0 +1,18 @@
+Problem Statement
+Traditional financial audits primarily focus on structured data and manually logged transactions. However,
+with the rise of verbal communications in financial operations (e.g., client advisory calls, trade desk
+decisions), critical instructions and decisions often go undocumented in audit trails. This creates compliance
+gaps, potential for disputes, and regulatory risk, particularly in environments governed by SEC, FINRA, or
+MiFID regulations.
+Technical Solution
+The invention proposes a voice-based auditing system that captures spoken communication during financial
+interactions, transcribes it using a financial-domain speech engine, classifies the content, and integrates it
+into the enterprise's audit trail. The system supports compliance checks, risk detection, timestamp correlation
+with system actions, and secure storage for audit verification.
+Core Inventive Features
+- Real-time voice capture and transcription tailored to financial terminology.
+- NLP-based classification to tag actionable events, disclosures, and approvals.
+- Automated correlation between spoken words and system actions (e.g., trades, account changes).
+- Risk and compliance layer for anomaly detection and flagging.
+- Immutable, regulation-compliant audit trail storage (WORM or blockchain-compatible).
+- Auditor dashboard with search, filter, and export capabilities.
